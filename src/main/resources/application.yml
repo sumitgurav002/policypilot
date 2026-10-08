@@ -1,0 +1,126 @@
+spring:
+  application:
+    name: policypilot
+  profiles:
+    # Which LLM provider to use: ollama (default, free, local) | gemini | openai
+    default: ollama
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/policypilot
+    username: postgres
+    password: postgres
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    defer-datasource-initialization: true   # run data.sql after Hibernate creates tables
+
+  sql:
+    init:
+      mode: always                           # loads seed data from data.sql
+
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
+
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: policypilot-ingestion
+      auto-offset-reset: earliest
+
+  ai:
+    vectorstore:
+      pgvector:
+        initialize-schema: true
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        dimensions: 768        # must match the embedding model's output size
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+
+policypilot:
+  upload-dir: ./data/uploads
+  rag:
+    top-k: 4
+    similarity-threshold: 0.3
+
+logging:
+  level:
+    com.policypilot: INFO
+
+---
+# Ollama (local, free). Install from https://ollama.com then run:
+#   ollama pull qwen2.5:7b
+#   ollama pull nomic-embed-text
+spring:
+  config:
+    activate:
+      on-profile: ollama
+  ai:
+    openai:
+      base-url: http://localhost:11434
+      api-key: ollama              # Ollama ignores it, but the client needs a value
+      chat:
+        options:
+          model: qwen2.5:7b        # supports tool calling; llama3.1:8b also works
+          temperature: 0.2
+      embedding:
+        options:
+          model: nomic-embed-text  # 768 dimensions
+
+---
+# Google Gemini through its OpenAI-compatible endpoint (free tier key from https://aistudio.google.com)
+spring:
+  config:
+    activate:
+      on-profile: gemini
+  ai:
+    openai:
+      base-url: https://generativelanguage.googleapis.com/v1beta/openai
+      api-key: ${GEMINI_API_KEY}
+      chat:
+        chat:
+          completions-path: /chat/completions
+          options:
+            model: ${GEMINI_CHAT_MODEL:gemini-3.8-flash}
+            temperature: 0.2
+      embedding:
+        embeddings-path: /embeddings
+        options:
+          model: gemini-embedding-001
+          dimensions: 768
+
+---
+# OpenAI (paid, very cheap for this project)
+---
+# Google Gemini through its OpenAI-compatible endpoint
+spring:
+  config:
+    activate:
+      on-profile: gemini
+  ai:
+    openai:
+      base-url: https://generativelanguage.googleapis.com/v1beta/openai
+      api-key: ${GEMINI_API_KEY}
+      chat:
+        completions-path: /chat/completions
+        options:
+          model: ${GEMINI_CHAT_MODEL:gemini-3.8-flash}
+          temperature: 0.2
+      embedding:
+        embeddings-path: /embeddings
+        options:
+          model: gemini-embedding-001
+          dimensions: 768
